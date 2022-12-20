@@ -22,8 +22,9 @@ Use the following steps to extract data from a rosbag, remove image distortions,
             bash multi_extract.sh
         ```
     5. Now sit back and wait until the extraction is complete. This process can take and hour or longer depending on the size of the rosbag.
+    6. `[IMPORTANT PLEASE READ]` By setting the variable MAKE_VID_DEFAULT in the step 1.1 or by export it as an environment variable in step 1.2, you can skip step 2 in the first pass.
 
-2. Convert the extracted image data to a video to view the segments that contain the car. This is important to reduce the dataset size that is sent to an external vendor for labelling, saving cost and time. Use the following command in the OUTPUT_DIR printed by the previous command:
+2. This step can be accomplished by setting Convert the extracted image data to a video to view the segments that contain the car. This is important to reduce the dataset size that is sent to an external vendor for labelling, saving cost and time. Use the following command in the OUTPUT_DIR printed by the previous command:
     ```bash
     ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p <NAME_AND_PATH_OF_VIDEO_FILE_OUTPUT.mp4>
     ```

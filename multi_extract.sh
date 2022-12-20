@@ -3,11 +3,12 @@
 # ---------------------------------------------------------------------------- #
 #                               DEFAULT VARIABLES                              #
 # ---------------------------------------------------------------------------- #
-DATA_DIR_DEFAULT="/media/Public/ROSBAG_BACKUPS/rosbag2_2022_11_09-16_27_25"
+DATA_DIR_DEFAULT="/media/Public/ROSBAG_BACKUPS/rosbag2_2022_09_21-12_58_49"
 VERBOSE_DEFAULT=1
-UNDISTORT_DEFAULT=0
+UNDISTORT_DEFAULT=1
 CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
-OUTPUT_BASE_DIR_DEFAULT="/media/Public/cam_tms/"
+OUTPUT_BASE_DIR_DEFAULT="/media/Public/Lucas_Oil/"
+MAKE_VID_DEFAULT=1
 
 # ---------------------------------------------------------------------------- #
 #                          PARSE ENVIRONMENT VARIABLES                         #
@@ -42,7 +43,7 @@ fi
 # ---------------------------- VERBOSITY SETTINGS ---------------------------- #
 if [ -z ${VERBOSE+x} ]; then
     echo "----------------------------------------------------------------------------"
-    VERBOSE=1
+    VERBOSE=$VERBOSE_DEFAULT
     echo "               VERBOSE not defined. Setting VERBOSE to $VERBOSE.                   "
     echo "----------------------------------------------------------------------------"
 else
@@ -54,7 +55,7 @@ fi
 # --------------------------- UNDISTORTION SETTINGS -------------------------- #
 if [ -z ${UNDISTORT:+x} ]; then
     echo "----------------------------------------------------------------------------"
-    UNDISTORT=0
+    UNDISTORT=$UNDISTORT_DEFAULT
     echo "              UNDISTORT not defined. Setting UNDISTORT to $UNDISTORT.                "
     echo "----------------------------------------------------------------------------"
 else
@@ -66,7 +67,7 @@ if [ $UNDISTORT -eq 1 ]; then
     if [ -z ${CALIB_DIR+x} ]; then
         echo "----------------------------------------------------------------------------"
         echo "                         CALIB_DIR not defined.                             "
-        CALIB_DIR="/home/roar/ART/perception/Camera/Calibration_new/"
+        CALIB_DIR=$CALIB_DIR_DEFAULT
         echo "Defaulting CALIB_DIR=$CALIB_DIR"
         echo "----------------------------------------------------------------------------"
     else
@@ -74,6 +75,18 @@ if [ $UNDISTORT -eq 1 ]; then
         echo "CALIB_DIR has been defined as $CALIB_DIR"
         echo "----------------------------------------------------------------------------"
     fi
+fi
+
+# ---------------------------- MAKE_VID SETTINGS ---------------------------- #
+if [ -z ${MAKE_VID+x} ]; then
+    echo "----------------------------------------------------------------------------"
+    MAKE_VID=$MAKE_VID_DEFAULT
+    echo "               MAKE_VID not defined. Setting MAKE_VID to $MAKE_VID_DEFAULT.                   "
+    echo "----------------------------------------------------------------------------"
+else
+    echo "----------------------------------------------------------------------------"
+    echo "                       MAKE_VID has been defined as $MAKE_VID                 "
+    echo "----------------------------------------------------------------------------"
 fi
 # --------------------- ENVIRONMENT VARIABLE PARSING END --------------------- #
 
@@ -107,18 +120,30 @@ find "$DATA_DIR" -iname "*.db3" -print0 | xargs -0 -I file dirname file | sort |
     echo "----------------------------------------------------------------------------"
 
     # -------------------------- Create output Directory ------------------------- #
-    # mkdir -p $OUTPUT_DIR
+    mkdir -p $OUTPUT_DIR
+
+    # ------------------ Begin Extraction Based on User Setting ------------------ #
     if [ $VERBOSE -eq 1 ]; then
         if [ $UNDISTORT -eq 1 ]; then
-            python3 tools/rosbag_perception_dataset_maker/ros2bag_image_extractor.py "$d" $OUTPUT_DIR -vup $CALIB_DIR
+            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -vup $CALIB_DIR
         else 
-            python3 tools/rosbag_perception_dataset_maker/ros2bag_image_extractor.py "$d" $OUTPUT_DIR -v
+            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -v
         fi
     else
         if [ $UNDISTORT -eq 1 ]; then
-            python3 tools/rosbag_perception_dataset_maker/ros2bag_image_extractor.py "$d" $OUTPUT_DIR -up $CALIB_DIR
+            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -up $CALIB_DIR
         else
-            python3 tools/rosbag_perception_dataset_maker/ros2bag_image_extractor.py "$d" $OUTPUT_DIR
+            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR
         fi
     fi
+
+    # --------------------- Convert Extracted Images to Video -------------------- #
+    if [ $MAKE_VID -eq 1 ]; then
+        for camera_output_dir in $OUTPUT_DIR/*/; do
+            cd $camera_output_dir
+            base_name=$(basename "$camera_output_dir")
+            ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p ../$base_name.mp4
+        done
+    fi
+
 done
