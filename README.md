@@ -50,7 +50,13 @@ Use the following steps to extract data from a rosbag, remove image distortions,
         ```
             python3 dataset_maker.py
         ```
-    
+5. Repeat Steps 2 and 3 for the extracted segments of images, to make sure that you have not removed images that had the car but you stopped early, or images that had the car and you started late in your ranges. If you find such discrepancy go back and adjust ranges appropriately and rerun step 4. Repeat this step (step 5), until you no longer make a mistake.
+
+
+## HELPFUL TIPS
+1. Try to get ranges that give atleast a 5-10 second margin from when the car enters and when it exits. 
+2. Watch the videos really carefully, and do not skip (its ok to go fast, but do not skip video frames) as there are instances when a car may only be available for a a second or two.
+
 # Contact
 * Aman Saraf | [amansaraf99@gmail.com](mailto:amansaraf99@gmail.com)
 
