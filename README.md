@@ -60,6 +60,7 @@ Use the following steps to extract data from a rosbag, remove image distortions,
 
 # Contact
 * Aman Saraf | [amansaraf99@gmail.com](mailto:amansaraf99@gmail.com)
+* Chris Lai  | [chris.lai@berkeley.edu](mailto:chris.lai@berkeley.edu)
 
     
 
