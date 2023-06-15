@@ -13,10 +13,12 @@ import numpy as np
 import cv2
 
 # --------------------------- ROS related Libraries -------------------------- #
-from rosbags.rosbag2 import Reader
-from rosbags.serde import deserialize_cdr
 from cv_bridge import CvBridge
 import rosbag2_py
+
+from rclpy.serialization import deserialize_message
+from rosidl_runtime_py.utilities import get_message
+
 
 
 # ---------------------------------------------------------------------------- #
@@ -59,6 +61,7 @@ arg_parser  = argparse.ArgumentParser(description='Extracts Images from ROS2 Bag
 arg_parser.add_argument('rosbag_file_path', help='Path to rosbag to extract the data from', type=dir_path)
 arg_parser.add_argument('output_dir', help='Path to directory where extracted data should be stored', type=dir_path)
 arg_parser.add_argument('-u', "--undistort", action="store_true")
+arg_parser.add_argument('-c', "--compressed", action="store_true")
 arg_parser.add_argument('-p', '--camera_info_path', help="Path to folder containing yaml config files for camera info for all cameras", type=dir_path)
 arg_parser.add_argument('-v', "--verbose", action="store_true")
 
@@ -66,6 +69,7 @@ arg_parser.add_argument('-v', "--verbose", action="store_true")
 args = arg_parser.parse_args()
 
 OUTPUT_DIR  = args.output_dir
+print("Output Directory: ", OUTPUT_DIR)
 ROSBAG_FILE_PATH = args.rosbag_file_path
 
 if args.undistort:
@@ -96,6 +100,7 @@ if not store_type:
 
 reader = rosbag2_py.SequentialReader()
 
+# ----------------------------- OBTAIN ALL TOPICS ---------------------------- #
 # Opens the bag files and sets the converter options
 try:
     reader.open(
@@ -110,31 +115,25 @@ except Exception as e:
 
 camera_found = False
 
-# for connection in reader.connections:
-#     if args.verbose:
-#         print(connection.topic," : ", connection.msgtype)
-#     if 'camera' in connection.topic:
-#         camera_found = True
-
-# if camera_found is False:
-#     print("Error: No camera topics found in bag. Exiting...")
-#     exit()
-
 # Iterator dictionary to go over camera messages
-iterator = {
-    '/camera/rear_left/image/compressed'            : 0,
-    '/camera/rear_right/image/compressed'           : 0,
-    '/camera/front_left/image/compressed'           : 0,
-    '/camera/front_left_center/image/compressed'    : 0,
-    '/camera/front_right_center/image/compressed'   : 0,
-    '/camera/front_right/image/compressed'          : 0,
-    '/vimba_rear_left/image'            : 0,
-    '/vimba_rear_right/image'           : 0,
-    '/vimba_front_left/image'           : 0,
-    '/vimba_front_left_center/image'    : 0,
-    '/vimba_front_right_center/image'   : 0,
-    '/vimba_front_right/image'          : 0,
-}
+if args.compressed:
+    iterator = {
+        '/vimba_front_left_center/image/compressed'  :0,
+        '/vimba_front_right_center/image/compressed' :0,
+        '/vimba_front_left/image/compressed'         :0,
+        '/vimba_front_right/image/compressed'        :0,
+        '/vimba_rear_left/image/compressed'          :0,
+        '/vimba_rear_right/image/compressed'         :0,
+    }
+else:
+    iterator = {
+        '/vimba_rear_left/image'            : 0,
+        '/vimba_rear_right/image'           : 0,
+        '/vimba_front_left/image'           : 0,
+        '/vimba_front_left_center/image'    : 0,
+        '/vimba_front_right_center/image'   : 0,
+        '/vimba_front_right/image'          : 0,
+    }
 
 # Checking if all the topics that are going to be collected are in the bag
 TOPIC_TYPES = reader.get_all_topics_and_types()
@@ -158,25 +157,30 @@ while reader.has_next():
         iterator[topic_name] += 1
 
         # Extract message from rosbag
+        msg_type = TYPE_MAP[topic_name]
+        msg_ser = get_message(msg_type)
+        msg = deserialize_message(data, msg_ser)
         output_topic = None
-        if (TYPE_MAP[topic_name] == "sensor_msgs/msg/CompressedImage"):
-            np_arr = np.frombuffer(data, np.uint8)
+        if (args.compressed and msg_type == "sensor_msgs/msg/CompressedImage"):
+            np_arr = np.frombuffer(msg.data, np.uint8)
             cv2_msg = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            output_topic = topic_name[7:-16]
+            output_topic = topic_name[7:-17]
         else:
             # Convert to cv2 image
-            cv2_msg = bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
-            output_topic = topic_name[:-5]
+            cv2_msg = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            output_topic = topic_name[1:-6]
 
         # Create a directory for topic in output dir if it does not exist
-        output_directory = OUTPUT_DIR + output_topic
+        print("Output Topic: ", output_topic)
+        output_directory = os.path.join(OUTPUT_DIR, output_topic)
+        
         if not os.path.exists(output_directory):
             if args.verbose:
                 print("Creating Directory: ", output_directory)
             os.mkdir(output_directory)
 
-        output_file_path = output_directory + 'Image' + '_' + '{0:010d}'.format(iterator[connection.topic]) + '_' + str(msg.header.stamp.sec) + '_' + str(msg.header.stamp.nanosec) + '.jpg'
-        
+        output_file_path = os.path.join(output_directory, 'Image' + '_' + '{0:010d}'.format(iterator[topic_name]) + '_' + str(msg.header.stamp.sec) + '_' + str(msg.header.stamp.nanosec) + '.jpg')
+
         # Undistort Image before Saving
         if args.undistort:
             # If distortion parameters not loaded then load them once
@@ -195,49 +199,3 @@ while reader.has_next():
         
 # Close the bag file
 del reader
-        
-
-# OLD_CODE
-# for connection, timetimestamp, rawdatastamp, rawdata in reader.messages():
-#     if connection.topic in iterator.keys():
-        
-#         # Update iterator for this topic
-#         iterator[connection.topic] += 1
-
-#         # Extract message from rosbag
-#         msg = deserialize_cdr(rawdata, connection.msgtype)
-#         output_topic = None
-#         if (connection.msgtype == "sensor_msgs/msg/CompressedImage"):
-#             np_arr = np.frombuffer(msg.data, np.uint8)
-#             cv2_msg = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-#             output_topic = connection.topic[7:-16]
-#         else:
-#             # Convert to cv2 image
-#             cv2_msg = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-#             output_topic = connection.topic[:-5]
-
-#         # Create a directory for topic in output dir if it does not exist
-#         output_directory = OUTPUT_DIR + output_topic
-#         if not os.path.exists(output_directory):
-#             if args.verbose:
-#                 print("Creating Directory: ", output_directory)
-#             os.mkdir(output_directory)
-
-#         output_file_path = output_directory + 'Image' + '_' + '{0:010d}'.format(iterator[connection.topic]) + '_' + str(msg.header.stamp.sec) + '_' + str(msg.header.stamp.nanosec) + '.jpg'
-        
-#         # Undistort Image before Saving
-#         if args.undistort:
-#             # If distortion parameters not loaded then load them once
-#             if connection.topic[1:-6] not in distortion_dict:
-#                 yaml_file_path = args.camera_info_path + connection.topic[1:-6] + '.yaml'
-#                 distortion_fp = open(file_path(yaml_file_path))
-#                 distortion_dict[connection.topic[1:-6]] = yaml.safe_load(distortion_fp)
-#             cv2_msg = undistort(cv2_msg, distortion_dict[connection.topic[1:-6]])
-
-#         # Save Image
-#         if args.verbose:
-#             print('Saving ' + output_file_path)
-
-#         if not cv2.imwrite(output_file_path, cv2_msg):
-#             raise Exception("Could not write image")
-        

@@ -3,12 +3,13 @@
 # ---------------------------------------------------------------------------- #
 #                               DEFAULT VARIABLES                              #
 # ---------------------------------------------------------------------------- #
-DATA_DIR_DEFAULT="/media/Public/ROSBAG_BACKUPS/rosbag2_2022_09_21-12_58_49"
+DATA_DIR_DEFAULT="/home/zhihao/rosbags/ALL_SIX_CAMERAS/"
 VERBOSE_DEFAULT=1
-UNDISTORT_DEFAULT=1
+UNDISTORT_DEFAULT=0
 CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
-OUTPUT_BASE_DIR_DEFAULT="/media/Public/Lucas_Oil/"
+OUTPUT_BASE_DIR_DEFAULT="/home/zhihao/chris/IAC_dataset_maker/output/"
 MAKE_VID_DEFAULT=1
+USE_COMPRESSED_DEFAULT=0
 
 # ---------------------------------------------------------------------------- #
 #                          PARSE ENVIRONMENT VARIABLES                         #
@@ -49,6 +50,18 @@ if [ -z ${VERBOSE+x} ]; then
 else
     echo "----------------------------------------------------------------------------"
     echo "                       VERBOSE has been defined as $VERBOSE                 "
+    echo "----------------------------------------------------------------------------"
+fi
+
+# ------------------------ USE_COMPRESSED SETTINGS --------------------------- #
+if [ -z ${USE_COMPRESSED+x} ]; then
+    echo "----------------------------------------------------------------------------"
+    USE_COMPRESSED=$USE_COMPRESSED_DEFAULT
+    echo "               USE_COMPRESSED not defined. Setting USE_COMPRESSED to $USE_COMPRESSED.                   "
+    echo "----------------------------------------------------------------------------"
+else
+    echo "----------------------------------------------------------------------------"
+    echo "                       USE_COMPRESSED has been defined as $USE_COMPRESSED                 "
     echo "----------------------------------------------------------------------------"
 fi
 
@@ -103,7 +116,7 @@ done
 # ---------------------------------------------------------------------------- #
 echo "\n\nSearching DATA_DIR for ROSBAGS now...\n"
 sleep 5s
-find "$DATA_DIR" -iname "*.db3" -print0 | xargs -0 -I file dirname file | sort | uniq | while read d; do
+find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | sort | uniq | while read d; do
     ROSBAG_NAME=$(basename "$d")
 
     # ---------------------------------------------------------------------------- #
@@ -120,29 +133,45 @@ find "$DATA_DIR" -iname "*.db3" -print0 | xargs -0 -I file dirname file | sort |
     echo "----------------------------------------------------------------------------"
 
     # -------------------------- Create output Directory ------------------------- #
-    mkdir -p $OUTPUT_DIR
+    mkdir -p "$OUTPUT_DIR"
 
     # ------------------ Begin Extraction Based on User Setting ------------------ #
     if [ $VERBOSE -eq 1 ]; then
         if [ $UNDISTORT -eq 1 ]; then
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -vup $CALIB_DIR
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -vucp "$CALIB_DIR"
+            else 
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -vup "$CALIB_DIR"
+            fi
         else 
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -v
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -vc
+            else
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -v
+            fi
         fi
     else
         if [ $UNDISTORT -eq 1 ]; then
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -up $CALIB_DIR
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -ucp "$CALIB_DIR"
+            else 
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -up "$CALIB_DIR"
+            fi
         else
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR" -c
+            else
+                python3 ros2bag_image_extractor.py "$d" "$OUTPUT_DIR"
+            fi
         fi
     fi
 
     # --------------------- Convert Extracted Images to Video -------------------- #
     if [ $MAKE_VID -eq 1 ]; then
-        for camera_output_dir in $OUTPUT_DIR/*/; do
-            cd $camera_output_dir
+        for camera_output_dir in "$OUTPUT_DIR"/*/; do
+            cd "$camera_output_dir"
             base_name=$(basename "$camera_output_dir")
-            ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p ../$base_name.mp4
+            ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "../$base_name.mp4"
         done
     fi
 
