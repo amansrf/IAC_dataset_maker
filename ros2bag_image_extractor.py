@@ -28,15 +28,19 @@ from rosidl_runtime_py.utilities import get_message
 # ------------------------ Check if directory is valid ----------------------- #
 def dir_path(string):
     if os.path.isdir(string):
+        print(f"Is a directory! {string}")
         return string
     else:
+        print(f"Is not a directory! {string}")
         raise NotADirectoryError(string)
 
 # ----------------------- Check if file path is valid ----------------------- #
 def file_path(string):
     if os.path.isfile(string):
+        print(f"Is a file! {string}")
         return string
     else:
+        print(f"Is not a string! {string}")
         raise FileNotFoundError(string)
 
 # ------------------------------ Undistort Image ----------------------------- #
@@ -147,6 +151,8 @@ if iterator:
 else:
     print("FATAL ERROR: TOPICS_TO_EXTRACT not defined.")
 
+counter = 0
+
 while reader.has_next():
     
     # Read the next message
@@ -171,7 +177,7 @@ while reader.has_next():
             output_topic = topic_name[1:-6]
 
         # Create a directory for topic in output dir if it does not exist
-        print("Output Topic: ", output_topic)
+        # print("Output Topic: ", output_topic)
         output_directory = os.path.join(OUTPUT_DIR, output_topic)
         
         if not os.path.exists(output_directory):
@@ -191,8 +197,13 @@ while reader.has_next():
             cv2_msg = undistort(cv2_msg, distortion_dict[topic_name[1:-6]])
 
         # Save Image
+        
+
         if args.verbose:
             print('Saving ' + output_file_path)
+        counter += 1
+        if counter %1000 == 0:
+            print(f"Processed {counter} Images")
 
         if not cv2.imwrite(output_file_path, cv2_msg):
             raise Exception("Could not write image")
