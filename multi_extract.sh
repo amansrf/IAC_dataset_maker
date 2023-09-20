@@ -3,11 +3,12 @@
 # ---------------------------------------------------------------------------- #
 #                               DEFAULT VARIABLES                              #
 # ---------------------------------------------------------------------------- #
-DATA_DIR_DEFAULT="/home/zhihao/rosbags/ALL_SIX_CAMERAS/"
+DATA_DIR_DEFAULT="/home/art-berk/rosbags/"
 VERBOSE_DEFAULT=1
-UNDISTORT_DEFAULT=0
-CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
-OUTPUT_BASE_DIR_DEFAULT="/home/zhihao/chris/IAC_dataset_maker/output/"
+UNDISTORT_DEFAULT=1
+# CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
+CALIB_DIR_DEFAULT="/home/art-berk/IAC_dataset_maker/putnam_calib/"
+OUTPUT_BASE_DIR_DEFAULT="/home/art-berk/IAC_dataset_maker/output/"
 MAKE_VID_DEFAULT=1
 USE_COMPRESSED_DEFAULT=0
 
@@ -103,8 +104,8 @@ else
 fi
 # --------------------- ENVIRONMENT VARIABLE PARSING END --------------------- #
 
-echo "\nPausing for 10 seconds. Press Ctrl+C to quit if the above settings are not correct.\n"
-for i in 1 2 3 4 5 6 7 8 9 10
+echo "\nPausing for 5 seconds. Press Ctrl+C to quit if the above settings are not correct.\n"
+for i in 1 2 3 4 5 
 do
   echo "$i seconds passed"
   sleep 1s
@@ -115,7 +116,8 @@ done
 #                 Find all rosbags at datadir and extract data                 #
 # ---------------------------------------------------------------------------- #
 echo "\n\nSearching DATA_DIR for ROSBAGS now...\n"
-sleep 5s
+root_dir=$(pwd)
+sleep 2s
 find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | sort | uniq | while read d; do
     ROSBAG_NAME=$(basename "$d")
 
@@ -134,8 +136,12 @@ find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I f
 
     # -------------------------- Create output Directory ------------------------- #
     mkdir -p "$OUTPUT_DIR"
-
+    echo 
     # ------------------ Begin Extraction Based on User Setting ------------------ #
+    cd "$root_dir"
+    current_dir=$(pwd)
+    echo "Current working directory is: $current_dir"
+    
     if [ $VERBOSE -eq 1 ]; then
         if [ $UNDISTORT -eq 1 ]; then
             if [ $USE_COMPRESSED -eq 1 ]; then
@@ -169,10 +175,18 @@ find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I f
     # --------------------- Convert Extracted Images to Video -------------------- #
     if [ $MAKE_VID -eq 1 ]; then
         for camera_output_dir in "$OUTPUT_DIR"/*/; do
+            echo "$OUTPUT_DIR"/*/
             cd "$camera_output_dir"
             base_name=$(basename "$camera_output_dir")
             ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "../$base_name.mp4"
+            cd -
         done
-    fi
+    
+        # for camera_output_dir in "$OUTPUT_DIR"/*/; do
+        #     cd "$camera_output_dir"
+        #     base_name=$(basename "${camera_output_dir%/}")
+        #     ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "../$base_name.mp4"
+        # done
 
+    fi
 done

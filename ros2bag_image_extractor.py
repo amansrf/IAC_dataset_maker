@@ -142,7 +142,7 @@ if iterator:
     for topic in iterator.keys():
         if topic not in TYPE_MAP:
             print("ERROR: The topic ", topic, " is not in the input bag.")
-            exit()
+            # exit()
         print("Topic ", topic, " found in the input bag.")
 else:
     print("FATAL ERROR: TOPICS_TO_EXTRACT not defined.")
