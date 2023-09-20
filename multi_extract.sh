@@ -175,7 +175,6 @@ find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I f
     # --------------------- Convert Extracted Images to Video -------------------- #
     if [ $MAKE_VID -eq 1 ]; then
         for camera_output_dir in "$OUTPUT_DIR"/*/; do
-            echo "$OUTPUT_DIR"/*/
             cd "$camera_output_dir"
             base_name=$(basename "$camera_output_dir")
             ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "../$base_name.mp4"
