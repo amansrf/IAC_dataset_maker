@@ -3,12 +3,14 @@
 # ---------------------------------------------------------------------------- #
 #                               DEFAULT VARIABLES                              #
 # ---------------------------------------------------------------------------- #
-DATA_DIR_DEFAULT="/media/Public/ROSBAG_BACKUPS/rosbag2_2022_09_21-12_58_49"
-VERBOSE_DEFAULT=1
+DATA_DIR_DEFAULT="/home/art-berk/rosbags/"
+VERBOSE_DEFAULT=0
 UNDISTORT_DEFAULT=1
-CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
-OUTPUT_BASE_DIR_DEFAULT="/media/Public/Lucas_Oil/"
+# CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
+CALIB_DIR_DEFAULT="/home/art-berk/IAC_dataset_maker/putnam_calib/"
+OUTPUT_BASE_DIR_DEFAULT="/home/art-berk/IAC_dataset_maker/output/"
 MAKE_VID_DEFAULT=1
+USE_COMPRESSED_DEFAULT=0
 
 # ---------------------------------------------------------------------------- #
 #                          PARSE ENVIRONMENT VARIABLES                         #
@@ -52,6 +54,18 @@ else
     echo "----------------------------------------------------------------------------"
 fi
 
+# ------------------------ USE_COMPRESSED SETTINGS --------------------------- #
+if [ -z ${USE_COMPRESSED+x} ]; then
+    echo "----------------------------------------------------------------------------"
+    USE_COMPRESSED=$USE_COMPRESSED_DEFAULT
+    echo "               USE_COMPRESSED not defined. Setting USE_COMPRESSED to $USE_COMPRESSED.                   "
+    echo "----------------------------------------------------------------------------"
+else
+    echo "----------------------------------------------------------------------------"
+    echo "                       USE_COMPRESSED has been defined as $USE_COMPRESSED                 "
+    echo "----------------------------------------------------------------------------"
+fi
+
 # --------------------------- UNDISTORTION SETTINGS -------------------------- #
 if [ -z ${UNDISTORT:+x} ]; then
     echo "----------------------------------------------------------------------------"
@@ -90,8 +104,8 @@ else
 fi
 # --------------------- ENVIRONMENT VARIABLE PARSING END --------------------- #
 
-echo "\nPausing for 10 seconds. Press Ctrl+C to quit if the above settings are not correct.\n"
-for i in 1 2 3 4 5 6 7 8 9 10
+echo "\nPausing for 5 seconds. Press Ctrl+C to quit if the above settings are not correct.\n"
+for i in 1 2 3 4 5 
 do
   echo "$i seconds passed"
   sleep 1s
@@ -102,9 +116,21 @@ done
 #                 Find all rosbags at datadir and extract data                 #
 # ---------------------------------------------------------------------------- #
 echo "\n\nSearching DATA_DIR for ROSBAGS now...\n"
-sleep 5s
-find "$DATA_DIR" -iname "*.db3" -print0 | xargs -0 -I file dirname file | sort | uniq | while read d; do
-    ROSBAG_NAME=$(basename "$d")
+root_dir=$(pwd)
+sleep 2s
+# find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | while read d; do
+# find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | sort -u | while IFS= read -r d; do
+#     echo "$d"
+# done
+find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | sort -u > /tmp/tempfile.txt
+
+
+# find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | sort -u | while IFS= read -r d; do
+while IFS= read -r line; do
+    echo "$line"
+
+    ROSBAG_NAME=$(basename "$line")
+    echo "ROSBAG_NAME $ROSBAG_NAME"
 
     # ---------------------------------------------------------------------------- #
     #                           NOTE: SPECIFY OUTPUT DIR                           #
@@ -115,35 +141,60 @@ find "$DATA_DIR" -iname "*.db3" -print0 | xargs -0 -I file dirname file | sort |
 
     # ------------------------------ Debug Verbosity ----------------------------- #
     echo "----------------------------------------------------------------------------"
-    echo "Found ROSBAG:              $d"
+    echo "Found ROSBAG:              $line"
     echo "Extracting images to:      $OUTPUT_DIR"
     echo "----------------------------------------------------------------------------"
 
     # -------------------------- Create output Directory ------------------------- #
-    mkdir -p $OUTPUT_DIR
+    mkdir -p "$OUTPUT_DIR"
 
     # ------------------ Begin Extraction Based on User Setting ------------------ #
+    cd "$root_dir"
+    
     if [ $VERBOSE -eq 1 ]; then
         if [ $UNDISTORT -eq 1 ]; then
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -vup $CALIB_DIR
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -vucp "$CALIB_DIR"
+            else 
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -vup "$CALIB_DIR"
+            fi
         else 
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -v
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -vc
+            else
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -v
+            fi
         fi
     else
         if [ $UNDISTORT -eq 1 ]; then
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR -up $CALIB_DIR
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -ucp "$CALIB_DIR"
+            else 
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -up "$CALIB_DIR"
+            fi
         else
-            python3 ros2bag_image_extractor.py "$d" $OUTPUT_DIR
+            if [ $USE_COMPRESSED -eq 1 ]; then
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR" -c
+            else
+                python3 ros2bag_image_extractor.py "$line" "$OUTPUT_DIR"
+            fi
         fi
     fi
 
     # --------------------- Convert Extracted Images to Video -------------------- #
     if [ $MAKE_VID -eq 1 ]; then
-        for camera_output_dir in $OUTPUT_DIR/*/; do
-            cd $camera_output_dir
+        for camera_output_dir in "$OUTPUT_DIR"/*/; do
             base_name=$(basename "$camera_output_dir")
-            ffmpeg -framerate 50 -pattern_type glob -i '*.jpg' -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p ../$base_name.mp4
+
+            # Ah, that narrows things down a bit. The behavior you're seeing could be related to ffmpeg inadvertently reading from standard input, which affects the subsequent iterations of the loop that reads from /tmp/tempfile.txt.
+            # Here's a solution: redirect the standard input of ffmpeg to /dev/null. This ensures that ffmpeg won't interfere with the input being read by the loop.
+            # Modify the ffmpeg line as follows:
+            ffmpeg -framerate 50 -pattern_type glob -i "$camera_output_dir/*.jpg" -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "./output/$ROSBAG_NAME/$base_name.mp4" > /dev/null 2>&1 < /dev/null
+
         done
     fi
+    sleep 1s
+# done
+done < /tmp/tempfile.txt
 
-done
+rm /tmp/tempfile.txt
