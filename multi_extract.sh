@@ -199,3 +199,4 @@ while IFS= read -r line; do
 done < /tmp/tempfile.txt
 
 rm /tmp/tempfile.txt
+find $OUTPUT_BASE_DIR_DEFAULT -type d -empty -delete # Cleanup Empty Directories
