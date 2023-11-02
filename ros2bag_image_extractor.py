@@ -28,19 +28,19 @@ from rosidl_runtime_py.utilities import get_message
 # ------------------------ Check if directory is valid ----------------------- #
 def dir_path(string):
     if os.path.isdir(string):
-        print(f"Is a directory! {string}")
+        # print(f"Is a directory! {string}")
         return string
     else:
-        print(f"Is not a directory! {string}")
+        # print(f"Is not a directory! {string}")
         raise NotADirectoryError(string)
 
 # ----------------------- Check if file path is valid ----------------------- #
 def file_path(string):
     if os.path.isfile(string):
-        print(f"Is a file! {string}")
+        # print(f"Is a file! {string}")
         return string
     else:
-        print(f"Is not a string! {string}")
+        # print(f"Is not a string! {string}")
         raise FileNotFoundError(string)
 
 # ------------------------------ Undistort Image ----------------------------- #
@@ -65,7 +65,7 @@ arg_parser  = argparse.ArgumentParser(description='Extracts Images from ROS2 Bag
 arg_parser.add_argument('rosbag_file_path', help='Path to rosbag to extract the data from', type=dir_path)
 arg_parser.add_argument('output_dir', help='Path to directory where extracted data should be stored', type=dir_path)
 arg_parser.add_argument('-u', "--undistort", action="store_true")
-arg_parser.add_argument('-c', "--compressed", action="store_true")
+arg_parser.add_argument('-c', "--compressed", action="store_false")
 arg_parser.add_argument('-p', '--camera_info_path', help="Path to folder containing yaml config files for camera info for all cameras", type=dir_path)
 arg_parser.add_argument('-v', "--verbose", action="store_true")
 
@@ -73,7 +73,15 @@ arg_parser.add_argument('-v', "--verbose", action="store_true")
 args = arg_parser.parse_args()
 
 OUTPUT_DIR  = args.output_dir
-print("Output Directory: ", OUTPUT_DIR)
+
+# Check if output directory exists
+if os.path.exists(OUTPUT_DIR):
+    # If it does exist, check if the directory is empty. If it is, just leave it. If not, just skip the rosbag.
+    if os.listdir(OUTPUT_DIR):
+        print("[script] Directory Exists and is Not Empty! Exiting...")
+        exit()
+
+print("[debug] Output Directory: ", OUTPUT_DIR)
 ROSBAG_FILE_PATH = args.rosbag_file_path
 
 if args.undistort:
@@ -91,15 +99,17 @@ bridge = CvBridge()
 # with Reader(ROSBAG_FILE) as reader:
 # Check if the extension is a db3 or mcap
 files = os.listdir(ROSBAG_FILE_PATH)
+print(f"[script] ROSBAG filepath: {ROSBAG_FILE_PATH}")
 for file in files:
     if file.endswith(".db3"):
         store_type = "sqlite3"
-        print("Detected Input bag is a db3 file.")
+        print("[script] Detected Input bag is a db3 file.")
+        
     elif file.endswith(".mcap"):
         store_type = "mcap"
-        print("Detected Input bag is a mcap file.")
+        print("[script] Detected Input bag is a mcap file.")
 if not store_type:
-    print("Error: Input bag is not a db3 or mcap file.")
+    print(f"[script] FATAL ERROR: Input bag is not a db3 or mcap file")
     exit()
 
 reader = rosbag2_py.SequentialReader()
@@ -117,39 +127,51 @@ except Exception as e:
     print(e)
     exit()
 
-camera_found = False
 
-# Iterator dictionary to go over camera messages
+# Check if there are images in the ROSBAG, if not, skip!
+# Get all the topic types and 
 if args.compressed:
-    iterator = {
-        '/vimba_front_left_center/image/compressed'  :0,
-        '/vimba_front_right_center/image/compressed' :0,
-        '/vimba_front_left/image/compressed'         :0,
-        '/vimba_front_right/image/compressed'        :0,
-        '/vimba_rear_left/image/compressed'          :0,
-        '/vimba_rear_right/image/compressed'         :0,
+
+    image_topics = {
+        '/vimba_front_left_center/image/compressed',
+        '/vimba_front_right_center/image/compressed',
+        '/vimba_front_left/image/compressed', 
+        '/vimba_front_right/image/compressed',        
+        '/vimba_rear_left/image/compressed',       
+        '/vimba_rear_right/image/compressed',   
+        '/vimba_rear_left/image'            ,
+        '/vimba_rear_right/image'           ,
+        '/vimba_front_left/image'           ,
+        '/vimba_front_left_center/image'    ,
+        '/vimba_front_right_center/image'   ,
+        '/vimba_front_right/image'          
     }
 else:
-    iterator = {
-        '/vimba_rear_left/image'            : 0,
-        '/vimba_rear_right/image'           : 0,
-        '/vimba_front_left/image'           : 0,
-        '/vimba_front_left_center/image'    : 0,
-        '/vimba_front_right_center/image'   : 0,
-        '/vimba_front_right/image'          : 0,
+    image_topics = {
+        '/vimba_rear_left/image'            ,
+        '/vimba_rear_right/image'           ,
+        '/vimba_front_left/image'           ,
+        '/vimba_front_left_center/image'    ,
+        '/vimba_front_right_center/image'   ,
+        '/vimba_front_right/image'          
     }
 
-# Checking if all the topics that are going to be collected are in the bag
+
 TOPIC_TYPES = reader.get_all_topics_and_types()
 TYPE_MAP = {TOPIC_TYPES[i].name: TOPIC_TYPES[i].type for i in range(len(TOPIC_TYPES))}
-if iterator:
-    for topic in iterator.keys():
-        if topic not in TYPE_MAP:
-            print("ERROR: The topic ", topic, " is not in the input bag.")
-            # exit()
-        print("Topic ", topic, " found in the input bag.")
-else:
-    print("FATAL ERROR: TOPICS_TO_EXTRACT not defined.")
+
+iterator = dict()
+
+# Initialize an iterator based on whether or not the topic is in the rosbag
+for t in TYPE_MAP:
+    if t in image_topics:
+        iterator[t] = 0
+
+if len(iterator) == 0:
+    print("[script] No Images to extract from this rosbag. Exiting...")
+    # If no camera topics are found, close the ROSBAG and return. TODO: Check if ffmpeg is happy about this
+    del reader
+    exit()
 
 counter = 0
 
@@ -192,7 +214,12 @@ while reader.has_next():
             # If distortion parameters not loaded then load them once
             if topic_name[1:-6] not in distortion_dict:
                 yaml_file_path = args.camera_info_path + topic_name[1:-6] + '.yaml'
-                distortion_fp = open(file_path(yaml_file_path))
+                try:
+                    distortion_fp = open(file_path(yaml_file_path))
+                except:
+                    del reader
+                    print("[script] FATAL ERROR: Opening .yaml file failed. NOT A FILE")
+                    exit()
                 distortion_dict[topic_name[1:-6]] = yaml.safe_load(distortion_fp)
             cv2_msg = undistort(cv2_msg, distortion_dict[topic_name[1:-6]])
 

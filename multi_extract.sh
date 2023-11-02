@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------- #
 #                               DEFAULT VARIABLES                              #
 # ---------------------------------------------------------------------------- #
-DATA_DIR_DEFAULT="/home/art-berk/rosbags/"
+DATA_DIR_DEFAULT="/media/art-berk/DRIVE2_ART/rosbags/"
 VERBOSE_DEFAULT=0
 UNDISTORT_DEFAULT=1
 # CALIB_DIR_DEFAULT="/home/roar/ART/perception/Camera/Calibration_new/"
@@ -127,10 +127,9 @@ find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I f
 
 # find "$DATA_DIR" \( -iname "*.db3" -o -iname "*.mcap" \) -print0 | xargs -0 -I file dirname file | sort -u | while IFS= read -r d; do
 while IFS= read -r line; do
-    echo "$line"
 
     ROSBAG_NAME=$(basename "$line")
-    echo "ROSBAG_NAME $ROSBAG_NAME"
+    # echo "ROSBAG_NAME $ROSBAG_NAME"
 
     # ---------------------------------------------------------------------------- #
     #                           NOTE: SPECIFY OUTPUT DIR                           #
@@ -182,17 +181,19 @@ while IFS= read -r line; do
     fi
 
     # --------------------- Convert Extracted Images to Video -------------------- #
-    if [ $MAKE_VID -eq 1 ]; then
-        for camera_output_dir in "$OUTPUT_DIR"/*/; do
-            base_name=$(basename "$camera_output_dir")
+    if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR)" ]; then # Check if the output directory is not empty first
+        if [ $MAKE_VID -eq 1 ]; then
+            for camera_output_dir in "$OUTPUT_DIR"/*/; do
+                base_name=$(basename "$camera_output_dir")
 
-            # Ah, that narrows things down a bit. The behavior you're seeing could be related to ffmpeg inadvertently reading from standard input, which affects the subsequent iterations of the loop that reads from /tmp/tempfile.txt.
-            # Here's a solution: redirect the standard input of ffmpeg to /dev/null. This ensures that ffmpeg won't interfere with the input being read by the loop.
-            # Modify the ffmpeg line as follows:
-            ffmpeg -framerate 50 -pattern_type glob -i "$camera_output_dir/*.jpg" -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "./output/$ROSBAG_NAME/$base_name.mp4" > /dev/null 2>&1 < /dev/null
+                # Ah, that narrows things down a bit. The behavior you're seeing could be related to ffmpeg inadvertently reading from standard input, which affects the subsequent iterations of the loop that reads from /tmp/tempfile.txt.
+                # Here's a solution: redirect the standard input of ffmpeg to /dev/null. This ensures that ffmpeg won't interfere with the input being read by the loop.
+                # Modify the ffmpeg line as follows:
+                ffmpeg -framerate 50 -pattern_type glob -i "$camera_output_dir/*.jpg" -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p "./output/$ROSBAG_NAME/$base_name.mp4" > /dev/null 2>&1 < /dev/null
 
-        done
-    fi
+            done
+        fi
+    fi 
     sleep 1s
 # done
 done < /tmp/tempfile.txt
